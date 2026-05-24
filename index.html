@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>等量电荷电场线示意图</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .hint {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.active {
+            background-color: #28a745;
+        }
+        canvas {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(26, 24, 24, 0.1);
+            cursor: default; /* 增加默认鼠标样式 */
+        }
+        /* 底部链接区域样式 */
+        .footer {
+            margin-top: 40px; /* 与上方的画布拉开距离 */
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .footer a {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 10px 20px;
+            border: 2px solid #007bff;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+        .footer a:hover {
+            background-color: #007bff;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+        }
+        h5 {
+            margin-top: 10px;
+        }
+        h5 a {
+            color: #555;
+            text-decoration: none;
+        }
+        h5 a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>等量电荷电场线演示</h1>
+    <div class="hint">按住鼠标左键可<b>左右拖拽</b>电荷，实时观察电场线变化。</div>
+    
+    <div class="controls">
+        <button id="btn-dipole" class="active" onclick="setMode('dipole')">正负点电荷</button>
+        <button id="btn-pospos" onclick="setMode('pospos')">正正点电荷</button>
+        <button id="btn-negneg" onclick="setMode('negneg')">负负点电荷</button>
+    </div>
+
+    <canvas id="simCanvas" width="800" height="500"></canvas>
+    
+    <div class="footer">
+        <a href="https://github.com/guoxinghao123/Visualization-of-electric-field-lines" target="_blank">点击查看本页源代码</a>
+    </div>
+    <h5>
+        <a href="https://github.com/guoxinghao123" target="_blank">@guoxinghao123</a>
+    </h5>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // 物理参数
+        const chargeDist = 200; 
+        const k = 10000; // 静电力常量（缩放后）
+        const stepSize = 3; // 稍微增大步长(从2改为3)，提升拖拽时的渲染帧率
+        const numLines = 24; // 每个电荷发出的电场线数量
+        const chargeRadius = 15; // 电荷半径
+
+        let mode = 'dipole'; // 默认模式：正负
+        let q1 = { x: width/2 - chargeDist/2, y: height/2, q: 1 };
+        let q2 = { x: width/2 + chargeDist/2, y: height/2, q: -1 };
+        
+        let draggingElement = null; // 记录当前正在拖拽的电荷
+
+        function setMode(newMode) {
+            mode = newMode;
+            document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+            
+            if (mode === 'dipole') {
+                q1.q = 1; q2.q = -1;
+                document.getElementById('btn-dipole').classList.add('active');
+            } else if (mode === 'pospos') {
+                q1.q = 1; q2.q = 1;
+                document.getElementById('btn-pospos').classList.add('active');
+            } else if (mode === 'negneg') {
+                q1.q = -1; q2.q = -1;
+                document.getElementById('btn-negneg').classList.add('active');
+            }
+            draw();
+        }
+
+        // 计算某一点的电场强度 (Ex, Ey)
+        function getE(x, y) {
+            let Ex = 0;
+            let Ey = 0;
+            const charges = [q1, q2];
+
+            for (let c of charges) {
+                let dx = x - c.x;
+                let dy = y - c.y;
+                let r2 = dx*dx + dy*dy;
+                if (r2 < 1) r2 = 1; // 防止除以零
+                let r = Math.sqrt(r2);
+                let E = (k * c.q) / r2;
+                Ex += E * (dx / r);
+                Ey += E * (dy / r);
+            }
+            return { Ex, Ey };
+        }
+
+        // 绘制箭头
+        function drawArrow(x, y, Ex, Ey, color) {
+            const angle = Math.atan2(Ey, Ex);
+            const arrowLen = 10;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - arrowLen * Math.cos(angle - Math.PI / 6), y - arrowLen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(x - arrowLen * Math.cos(angle + Math.PI / 6), y - arrowLen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function drawFieldLines() {
+            ctx.strokeStyle = "#999999"; 
+            ctx.lineWidth = 1.5;
+
+            const charges = [q1, q2];
+            
+            for (let c of charges) {
+                let reverse = (c.q < 0);
+
+                for (let i = 0; i < numLines; i++) {
+                    let angle = (i * 2 * Math.PI) / numLines;
+                    let x = c.x + Math.cos(angle) * 10; 
+                    let y = c.y + Math.sin(angle) * 10;
+
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+
+                    let stepCount = 0;
+                    let arrowDrawn = false;
+
+                    while (x > 0 && x < width && y > 0 && y < height && stepCount < 1500) {
+                        let { Ex, Ey } = getE(x, y);
+                        let E_mag = Math.sqrt(Ex*Ex + Ey*Ey);
+                        
+                        let dx = (Ex / E_mag) * stepSize;
+                        let dy = (Ey / E_mag) * stepSize;
+
+                        if (reverse) {
+                            dx = -dx;
+                            dy = -dy;
+                        }
+
+                        x += dx;
+                        y += dy;
+                        ctx.lineTo(x, y);
+
+                        let hitCharge = false;
+                        for (let other_c of charges) {
+                            if (c !== other_c) { 
+                                let dist = Math.sqrt((x - other_c.x)**2 + (y - other_c.y)**2);
+                                if (dist < chargeRadius) { hitCharge = true; break; }
+                            }
+                        }
+                        if (hitCharge) break;
+
+                        if (stepCount === 40 && !arrowDrawn) {
+                            ctx.stroke(); 
+                            drawArrow(x, y, Ex, Ey, "#999999");
+                            ctx.beginPath();
+                            ctx.moveTo(x, y);
+                            arrowDrawn = true;
+                        }
+
+                        stepCount++;
+                    }
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawCharge(c) {
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, chargeRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = c.q > 0 ? "#ff4d4d" : "#4da6ff";
+            ctx.fill();
+            ctx.strokeStyle = "#333";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = "white";
+            ctx.font = "20px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(c.q > 0 ? "+" : "-", c.x, c.y + 2);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            drawFieldLines();
+            drawCharge(q1);
+            drawCharge(q2);
+        }
+
+        // --- 鼠标交互事件监听 ---
+
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: evt.clientX - rect.left,
+                y: evt.clientY - rect.top
+            };
+        }
+
+        canvas.addEventListener('mousedown', function(evt) {
+            const pos = getMousePos(evt);
+            const hitbox = chargeRadius + 8; // 稍微扩大点击判定区域
+
+            if (Math.hypot(pos.x - q1.x, pos.y - q1.y) < hitbox) {
+                draggingElement = q1;
+                canvas.style.cursor = 'grabbing';
+            } else if (Math.hypot(pos.x - q2.x, pos.y - q2.y) < hitbox) {
+                draggingElement = q2;
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', function(evt) {
+            const pos = getMousePos(evt);
+
+            if (draggingElement) {
+                let newX = pos.x;
+                // 限制边界，防止拖出画布
+                if (newX < chargeRadius) newX = chargeRadius;
+                if (newX > width - chargeRadius) newX = width - chargeRadius;
+                
+                draggingElement.x = newX;
+                requestAnimationFrame(draw); // 使用动画帧请求重绘，保证流畅度
+            } else {
+                // 悬停变小手提示
+                const hitbox = chargeRadius + 8;
+                if (Math.hypot(pos.x - q1.x, pos.y - q1.y) < hitbox || 
+                    Math.hypot(pos.x - q2.x, pos.y - q2.y) < hitbox) {
+                    canvas.style.cursor = 'grab';
+                } else {
+                    canvas.style.cursor = 'default';
+                }
+            }
+        });
+
+        canvas.addEventListener('mouseup', function() {
+            draggingElement = null;
+            canvas.style.cursor = 'default';
+        });
+
+        canvas.addEventListener('mouseleave', function() {
+            draggingElement = null;
+            canvas.style.cursor = 'default';
+        });
+
+        // 初始化绘制
+        draw();
+    </script>
+</body>
+</html>
